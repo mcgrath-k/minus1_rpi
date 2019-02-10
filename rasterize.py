@@ -1,0 +1,236 @@
+# Kyle McGrath 2019
+# Commission for Scott Young
+# MINUS ONE
+
+from __future__ import print_function
+from PIL import ImageFont, ImageDraw, Image
+from Adafruit_Thermal import *
+import RPi.GPIO as GPIO
+import smbus
+import subprocess, time, socket
+import numpy as np
+import requests
+import datetime
+print('...finished')
+
+# GPIO configuration
+ledPin       = 18
+buttonPin    = 23
+holdTime     = 2
+tapTime      = 0.01
+nextInterval = 0.0
+dailyFlag    = False
+lastId       = '1'
+printer      = Adafruit_Thermal('/dev/serial0', 19200, timeout=5)
+
+# Arduino GPIO connection
+bus = smbus.SMBus(1)
+address = 0x04
+
+i2cID = {'wifi_on'  : 11,
+         'wifi_off' : 42,
+         'loading'  : 69,
+         'printing' : 44}
+
+
+# Set connection, printer, and image layout variables
+ip           = '192.168.137.1'
+local_ip     = 'http://localhost:3000'
+port         = '5000'
+host         = ('http://' + ip + ':' + port + '/press')
+upper_text   = "There are"
+bottom1_text = "humans in my way"
+bottom2_text = "of finding you."
+handle       = '@scottyoung11'
+lastPop      = 7681380994
+dim_x        = 1380
+dim_y        = 660
+padding_l    = 20
+padding_r    = dim_x - 50
+line_height  = 305
+channels     = 3
+black        = (0,0,0,255)
+buttonid     = 0
+
+# Dashed line spec
+steps       = 68
+line_size   = 30
+step_length = (padding_r-padding_l)/steps
+
+# Import truetype fonts
+helveticaneue  = ImageFont.truetype('/home/pi/minusone/fonts/helveticaneue/HelveticaNeueBd.ttf', 90)
+major_mono_reg = ImageFont.truetype('/home/pi/minusone/fonts/major_mono_display/MajorMonoDisplay-Regular.ttf', 90)
+teko_med       = ImageFont.truetype('/home/pi/minusone/fonts/teko/Teko-Medium.ttf', 200)
+teko_reg       = ImageFont.truetype('/home/pi/minusone/fonts/teko/Teko-Regular.ttf', 50)
+teko_sign      = ImageFont.truetype('/home/pi/minusone/fonts/teko/Teko-Regular.ttf', 60)
+
+
+def tap():
+    global serverStatus
+    bus.write_byte(address, i2cID['printing'])
+    pop, status = grab_population()
+    print('got button request at population: ', pop)
+    population_img = create_image(pop)
+    # printer.printImage(pil_im)
+    population_img.save('/tmp/bittest.bmp', 'PNG')
+    subprocess.call(["lp", "-o", "fit-to-page", "/tmp/bittest.bmp"])
+    time.sleep(20)
+    if serverStatus:
+      bus.write_byte(address, i2cID['wifi_on'])
+    else:
+      bus.write_byte(address, i2cID['wifi_off'])
+
+
+# Called when button is held down.  Prints image, invokes shutdown process.
+def hold():
+    GPIO.output(ledPin, GPIO.LOW)
+    print('button held')
+    printer.println('SHUTTING DOWN')
+    printer.feed(3)
+    subprocess.call("sync")
+    GPIO.output(ledPin, GPIO.HIGH)
+    GPIO.cleanup()
+    subprocess.call(["shutdown", "-h", "now"])
+
+
+def grab_population():
+    # Define which device is sending
+    payload = {'button': buttonid}
+    global lastPop
+
+    try:
+        # Grab population from remote server, subtract one *wink wink*
+        population_get = requests.get(host, params=payload, timeout=3)
+        population = int(population_get.text)
+        lastPop = population
+        print (population_get.url)
+        connection = True
+
+    except requests.exceptions.ConnectionError as errc:
+        population = int(lastPop)
+        #lastPop = lastPop + 19
+        # Add I2C status??
+        print('connectionError, set population: ', population)
+        connection = False
+
+    # add thousandths commas, replace with periods.
+    population = '{:,}'.format(population)
+
+    # just add commas
+    #population = '{:,}'.format(population)
+
+    #population = population.replace(',', '.')
+    return population, connection
+
+def create_image(population):
+    # Create blank array, fill white
+    img = np.zeros((dim_y, dim_x, channels), dtype=np.uint8)
+    img.fill(255)
+
+    # Convert to Pillow image, initialize drawing
+    pil_im = Image.fromarray(img)
+    draw = ImageDraw.Draw(pil_im)
+
+    # Grab time/date
+    currentTime = str(datetime.datetime.now()).split(' ')
+
+    draw.text((padding_l, 50), upper_text, font=helveticaneue, fill=black, width = 2)
+    draw.text((padding_l, 340), bottom1_text, font=helveticaneue, fill=black, width = 2)
+    draw.text((padding_l, 440), bottom2_text, font=helveticaneue, fill=black, wdith = 2)
+
+
+    draw.text((padding_l, 600), currentTime[0], font=teko_reg, fill=black, width = 1)
+    draw.text((padding_l + 300, 600), currentTime[1], font=teko_reg, fill=black, width=1)
+    draw.text((padding_l + 1100, 600), 'minus1.net', font=teko_sign, fill=black, width=1)
+
+    # Draw population from webserver in Teko
+    draw.text((padding_l, 120), population, font=teko_med, fill=black, width=1)
+
+    # Straight lines
+    #draw.line([(padding_l, line_height), (dim_x, line_height)], fill=black, width=3)
+    #draw.line([(padding_l, line_height+15), (dim_x, line_height+15)], fill=black, width=3)
+
+    # dashed line for the win!
+    #for i in range(steps):
+    #    spacer = step_length*i
+
+        # 45 degree
+        #draw.line([(padding_l + line_size + spacer, 300), (padding_l + spacer, 300+line_size)],
+	#	 fill=black, width=3)
+
+        # 135 degree
+        #draw.line([(padding_l+spacer, line_height), (padding_l+line_size+spacer, line_height+line_size)],
+	#	 fill=black, width=3)
+    return pil_im
+
+def epic_fail():
+  subprocess.call("sync")
+  GPIO.output(ledPin, GPIO.HIGH)
+  GPIO.cleanup()
+  raise ValueError('SHUTDOWN')
+
+
+
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(17, GPIO.OUT) # Program status wire
+bus.write_byte(address, i2cID['loading'])
+
+GPIO.setup(buttonPin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+
+time.sleep(5)
+
+
+
+# Poll initial button state and time
+prevButtonState = GPIO.input(buttonPin)
+prevTime        = time.time()
+tapEnable       = False
+holdEnable      = False
+
+
+if __name__ == "__main__":
+    #pop = grab_population()
+    #print('population = ', pop)
+    #create_image(pop)
+    #pil_im.show()
+    global serverStatus
+    popTest, serverStatus = grab_population()
+    print('ready: ', popTest, ' wifi: ', serverStatus)
+
+
+    if serverStatus:
+      bus.write_byte(address, i2cID['wifi_on'])
+    else:
+      bus.write_byte(address, i2cID['wifi_off'])
+
+    # Main loop
+
+    while(True):
+      # Poll current button state and time
+      buttonState = GPIO.input(buttonPin)
+      t           = time.time()
+
+      GPIO.output(17, GPIO.HIGH)
+
+      # Has button state changed?
+      if buttonState != prevButtonState:
+        prevButtonState = buttonState   # Yes, save new state/time
+        prevTime        = t
+      else:                             # Button state unchanged
+        if (t - prevTime) >= holdTime:  # Button held more than 'holdTime'?
+          # Yes it has.  Is the hold action as-yet untriggered?
+          if holdEnable == True:        # Yep!
+            hold()                      # Perform hold action (usu. shutdown)
+            holdEnable = False          # 1 shot...don't repeat hold action
+            tapEnable  = False          # Don't do tap action on release
+        elif (t - prevTime) >= tapTime: # Not holdTime.  tapTime elapsed?
+          # Yes.  Debounced press or release...
+          if buttonState == True:       # Button released?
+            if tapEnable == True:       # Ignore if prior hold()
+              tap()                     # Tap triggered (button released)
+              tapEnable  = False        # Disable tap and hold
+              holdEnable = False
+          else:                         # Button pressed
+            tapEnable  = True           # Enable tap and hold actions
+            holdEnable = True
+
