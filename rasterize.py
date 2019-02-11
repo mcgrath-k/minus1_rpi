@@ -195,14 +195,12 @@ def epic_fail():
   GPIO.cleanup()
   raise ValueError('SHUTDOWN')
 
-def main_loop():
+def main_button_loop():
     global lastPop, lastDate
+    global serverStatus
     lastPop, lastDate = load_last_pop()
 
-
-
     GPIO.setup(buttonPin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-
     time.sleep(5)
 
     local_interpolation()
@@ -213,14 +211,8 @@ def main_loop():
     tapEnable       = False
     holdEnable      = False
 
-    #pop = grab_population()
-    #print('population = ', pop)
-    #create_image(pop)
-    #pil_im.show()
-    global serverStatus
     popTest, serverStatus = grab_population()
     print('ready: ', popTest, ' wifi: ', serverStatus)
-
 
     if serverStatus:
       bus.write_byte(address, i2cID['wifi_on'])
@@ -260,17 +252,23 @@ def main_loop():
 
 def main():
     try:
-        main_loop()
-        return 0
-    except KeyboardInterrupt:
-        GPIO.cleanup()
-        print('heeeeeeyyyyy')
-        time.sleep(2)
-        return 1
-    except Exception, err:
-        traceback.print_exc()
-        GPIO.cleanup()
+        print('we out here')
+        try:
+            print('we out here too')
+            main_loop()
+            return 0
+
+        except KeyboardInterrupt:
+            GPIO.cleanup()
+            print('heeeeeeyyyyy')
+            time.sleep(2)
+            return 1
+        except Exception, err:
+            print('block 3')
+            traceback.print_exc()
+            GPIO.cleanup()
     finally:
+        print('cleanup')
         GPIO.cleanup()
         print('GPIO cleanup')
 
