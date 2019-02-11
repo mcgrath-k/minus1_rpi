@@ -14,6 +14,7 @@ import numpy as np
 import requests
 import pickle
 import datetime
+import os
 print('Libraries loaded.')
 
 
@@ -58,17 +59,19 @@ channels     = 3
 black        = (0,0,0,255)
 buttonid     = 0
 
+workingDir = sys.path[0]
+
 # Dashed line spec
 steps       = 68
 line_size   = 30
 step_length = (padding_r-padding_l)/steps
 
 # Import truetype fonts
-helveticaneue  = ImageFont.truetype('/home/pi/minusone/fonts/helveticaneue/HelveticaNeueBd.ttf', 90)
-major_mono_reg = ImageFont.truetype('/home/pi/minusone/fonts/major_mono_display/MajorMonoDisplay-Regular.ttf', 90)
-teko_med       = ImageFont.truetype('/home/pi/minusone/fonts/teko/Teko-Medium.ttf', 200)
-teko_reg       = ImageFont.truetype('/home/pi/minusone/fonts/teko/Teko-Regular.ttf', 50)
-teko_sign      = ImageFont.truetype('/home/pi/minusone/fonts/teko/Teko-Regular.ttf', 60)
+helveticaneue  = ImageFont.truetype(os.path.join(workingDir, 'fonts/helveticaneue/HelveticaNeueBd.ttf'), 90)
+major_mono_reg = ImageFont.truetype(os.path.join(workingDir, 'fonts/major_mono_display/MajorMonoDisplay-Regular.ttf'), 90)
+teko_med       = ImageFont.truetype(os.path.join(workingDir, 'fonts/teko/Teko-Medium.ttf'), 200)
+teko_reg       = ImageFont.truetype(os.path.join(workingDir, 'fonts/teko/Teko-Regular.ttf'), 50)
+teko_sign      = ImageFont.truetype(os.path.join(workingDir, 'fonts/teko/Teko-Regular.ttf'), 60)
 
 
 def tap():
@@ -105,7 +108,7 @@ def save_last_pop(population):
         f.close()
 
 def load_last_pop():
-    with open('lastpop.pckl', 'rb') as f:
+    with open(os.path.join(workingDir, 'lastpop.pckl'), 'rb') as f:
         pop, date = pickle.load(f)
         f.close()
     print('last population: ', pop, ' at time: ', date)
@@ -253,13 +256,12 @@ def main_button_loop():
 def main():
     try:
         print('trying main')
-        main_loop()
+        main_button_loop()
         return 0
 
     except KeyboardInterrupt:
         print('error: KeyboardInterrupt')
         GPIO.cleanup()
-        print('heeeeeeyyyyy')
         time.sleep(2)
         return 1
 
