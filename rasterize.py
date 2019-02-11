@@ -16,9 +16,6 @@ import pickle
 import datetime
 print('Libraries loaded.')
 
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(17, GPIO.OUT) # Program status wire
-bus.write_byte(address, i2cID['loading'])
 
 # GPIO configuration
 ledPin       = 18
@@ -39,6 +36,9 @@ i2cID = {'wifi_on'  : 11,
          'loading'  : 69,
          'printing' : 44}
 
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(17, GPIO.OUT) # Program status wire
+bus.write_byte(address, i2cID['loading'])
 
 # Set connection, printer, and image layout variables
 ip           = 'minus1.net'
@@ -112,6 +112,7 @@ def load_last_pop():
     return pop, date
 
 def local_interpolation():
+    global lastDate, lastPop
     birthRate = 2.597982
     timeChange = (datetime.datetime.now() - lastDate).seconds
     popEstimate = int(round((timeChange*birthRate) + lastPop))
@@ -195,7 +196,7 @@ def epic_fail():
   raise ValueError('SHUTDOWN')
 
 def main_loop():
-
+    global lastPop, lastDate
     lastPop, lastDate = load_last_pop()
 
 
@@ -261,9 +262,14 @@ def main():
     try:
         main_loop()
         return 0
+    except KeyboardInterrupt:
+        GPIO.cleanup()
+        print('heeeeeeyyyyy')
+        time.sleep(2)
+        return 1
     except Exception, err:
         traceback.print_exc()
-        return 1
+        GPIO.cleanup()
     finally:
         GPIO.cleanup()
         print('GPIO cleanup')
