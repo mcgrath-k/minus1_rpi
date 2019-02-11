@@ -34,10 +34,10 @@ i2cID = {'wifi_on'  : 11,
 
 
 # Set connection, printer, and image layout variables
-ip           = '192.168.137.1'
+ip           = 'minus1.net'
 local_ip     = 'http://localhost:3000'
 port         = '5000'
-host         = ('http://' + ip + ':' + port + '/press')
+host         = ('http://' + ip + '/press')
 upper_text   = "There are"
 bottom1_text = "humans in my way"
 bottom2_text = "of finding you."
