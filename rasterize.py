@@ -153,7 +153,7 @@ def create_image(population):
     img = np.zeros((dim_y, dim_x, channels), dtype=np.uint8)
     img.fill(255)
 
-    # Convert to Pillow image, initialize drawing
+    # Convert to Pillow image, initialize drawing object
     pil_im = Image.fromarray(img)
     draw = ImageDraw.Draw(pil_im)
 
@@ -252,21 +252,22 @@ def main_button_loop():
 
 def main():
     try:
-        print('we out here')
-        try:
-            print('we out here too')
-            main_loop()
-            return 0
+        print('trying main')
+        main_loop()
+        return 0
 
-        except KeyboardInterrupt:
-            GPIO.cleanup()
-            print('heeeeeeyyyyy')
-            time.sleep(2)
-            return 1
-        except Exception, err:
-            print('block 3')
-            traceback.print_exc()
-            GPIO.cleanup()
+    except KeyboardInterrupt:
+        print('error: KeyboardInterrupt')
+        GPIO.cleanup()
+        print('heeeeeeyyyyy')
+        time.sleep(2)
+        return 1
+
+    except Exception, err:
+        print('error: (should highlight)')
+        traceback.print_exc()
+        GPIO.cleanup()
+
     finally:
         print('cleanup')
         GPIO.cleanup()
@@ -274,4 +275,4 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main_loop())
+    sys.exit(main())
