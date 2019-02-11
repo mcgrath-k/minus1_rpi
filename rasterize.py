@@ -8,6 +8,7 @@ from Adafruit_Thermal import *
 import RPi.GPIO as GPIO
 import smbus
 import subprocess, time, socket
+import traceback
 import numpy as np
 import requests
 import pickle
@@ -259,7 +260,7 @@ def main():
         main_loop()
         return 0
     except Exception, err:
-        print('Caught Exception')
+        traceback.print_exc()
         return 1
     finally:
         GPIO.cleanup()
@@ -267,4 +268,4 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main_loop())
