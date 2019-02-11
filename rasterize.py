@@ -208,7 +208,7 @@ tapEnable       = False
 holdEnable      = False
 
 
-if __name__ == "__main__":
+def main_loop():
     #pop = grab_population()
     #print('population = ', pop)
     #create_image(pop)
@@ -224,7 +224,6 @@ if __name__ == "__main__":
       bus.write_byte(address, i2cID['wifi_off'])
 
     # Main loop
-  try:
     while(True):
       # Poll current button state and time
       buttonState = GPIO.input(buttonPin)
@@ -253,12 +252,19 @@ if __name__ == "__main__":
           else:                         # Button pressed
             tapEnable  = True           # Enable tap and hold actions
             holdEnable = True
-    except KeyboardInterrupt:
-      print('keyboard interrupt')
-      GPIO.cleanup()
-      sys.exit(0)
-    finally:
-      print('fatal error')
-      GPIO.cleanup()
-      sys.exit(0)
 
+
+def main():
+    try:
+        main_loop()
+        return 0
+    except Exception, err:
+        print('Caught Exception')
+        return 1
+    finally:
+        GPIO.cleanup()
+        print('GPIO cleanup')
+
+
+if __name__ == "__main__":
+    sys.exit(main())
