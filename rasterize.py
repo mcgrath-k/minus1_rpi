@@ -10,13 +10,14 @@ import smbus
 import subprocess, time, socket
 import numpy as np
 import requests
+import pickle
 import datetime
 print('...finished')
 
 # GPIO configuration
 ledPin       = 18
 buttonPin    = 23
-holdTime     = 2
+holdTime     = 10
 tapTime      = 0.01
 nextInterval = 0.0
 dailyFlag    = False
@@ -42,7 +43,6 @@ upper_text   = "There are"
 bottom1_text = "humans in my way"
 bottom2_text = "of finding you."
 handle       = '@scottyoung11'
-lastPop      = 7681380994
 dim_x        = 1380
 dim_y        = 660
 padding_l    = 20
@@ -83,15 +83,34 @@ def tap():
 
 # Called when button is held down.  Prints image, invokes shutdown process.
 def hold():
-    GPIO.output(ledPin, GPIO.LOW)
+    bus.write_byte(address, i2cID['loading'])
     print('button held')
     printer.println('SHUTTING DOWN')
     printer.feed(3)
     subprocess.call("sync")
-    GPIO.output(ledPin, GPIO.HIGH)
     GPIO.cleanup()
-    subprocess.call(["shutdown", "-h", "now"])
+    #subprocess.call(["shutdown", "-h", "now"])
 
+def save_last_pop(population):
+    currentDate = datetime.datetime.now()
+    currentStatus = [population, currentDate]
+    with open('lastpop.pckl', 'wb') as f:
+        pickle.dump(currentStatus, f)
+        f.close()
+
+def load_last_pop():
+    with open('lastpop.pckl', 'rb') as f:
+        pop, date = pickle.load(f)
+        f.close()
+    print('last population: ', pop, ' at time: ', date)
+    return pop, date
+
+def local_interpolation():
+    birthRate = 2.597982
+    timeChange = (datetime.datetime.now() - lastDate).seconds
+    popEstimate = int(round((timeChange*birthRate) + lastPop))
+    print('population estimate: ', popEstimate)
+    return popEstimate
 
 def grab_population():
     # Define which device is sending
@@ -102,12 +121,12 @@ def grab_population():
         # Grab population from remote server, subtract one *wink wink*
         population_get = requests.get(host, params=payload, timeout=3)
         population = int(population_get.text)
-        lastPop = population
+        save_last_pop(population)
         print (population_get.url)
         connection = True
 
     except requests.exceptions.ConnectionError as errc:
-        population = int(lastPop)
+        population = local_interpolation()
         #lastPop = lastPop + 19
         # Add I2C status??
         print('connectionError, set population: ', population)
@@ -170,6 +189,7 @@ def epic_fail():
   raise ValueError('SHUTDOWN')
 
 
+lastPop, lastDate = load_last_pop()
 
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(17, GPIO.OUT) # Program status wire
@@ -179,7 +199,7 @@ GPIO.setup(buttonPin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
 time.sleep(5)
 
-
+local_interpolation()
 
 # Poll initial button state and time
 prevButtonState = GPIO.input(buttonPin)
@@ -204,7 +224,7 @@ if __name__ == "__main__":
       bus.write_byte(address, i2cID['wifi_off'])
 
     # Main loop
-
+  try:
     while(True):
       # Poll current button state and time
       buttonState = GPIO.input(buttonPin)
@@ -233,4 +253,12 @@ if __name__ == "__main__":
           else:                         # Button pressed
             tapEnable  = True           # Enable tap and hold actions
             holdEnable = True
+    except KeyboardInterrupt:
+      print('keyboard interrupt')
+      GPIO.cleanup()
+      sys.exit(0)
+    finally:
+      print('fatal error')
+      GPIO.cleanup()
+      sys.exit(0)
 
