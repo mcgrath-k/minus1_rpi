@@ -3,6 +3,7 @@
 # MINUS ONE
 
 from __future__ import print_function
+print('Libraries loading:\n')
 from PIL import ImageFont, ImageDraw, Image
 from Adafruit_Thermal import *
 import RPi.GPIO as GPIO
@@ -13,7 +14,11 @@ import numpy as np
 import requests
 import pickle
 import datetime
-print('...finished')
+print('Libraries loaded.')
+
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(17, GPIO.OUT) # Program status wire
+bus.write_byte(address, i2cID['loading'])
 
 # GPIO configuration
 ledPin       = 18
@@ -189,27 +194,24 @@ def epic_fail():
   GPIO.cleanup()
   raise ValueError('SHUTDOWN')
 
-
-lastPop, lastDate = load_last_pop()
-
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(17, GPIO.OUT) # Program status wire
-bus.write_byte(address, i2cID['loading'])
-
-GPIO.setup(buttonPin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-
-time.sleep(5)
-
-local_interpolation()
-
-# Poll initial button state and time
-prevButtonState = GPIO.input(buttonPin)
-prevTime        = time.time()
-tapEnable       = False
-holdEnable      = False
-
-
 def main_loop():
+
+    lastPop, lastDate = load_last_pop()
+
+
+
+    GPIO.setup(buttonPin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+
+    time.sleep(5)
+
+    local_interpolation()
+
+    # Poll initial button state and time
+    prevButtonState = GPIO.input(buttonPin)
+    prevTime        = time.time()
+    tapEnable       = False
+    holdEnable      = False
+
     #pop = grab_population()
     #print('population = ', pop)
     #create_image(pop)
