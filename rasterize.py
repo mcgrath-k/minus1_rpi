@@ -17,6 +17,7 @@ import datetime
 import os
 print('Libraries loaded.')
 
+#logging.basicConfig(filename='traceback.log', level=os.environ.get("LOGLEVEL", "INFO"))
 
 # GPIO configuration
 ledPin       = 18
@@ -75,7 +76,6 @@ teko_sign      = ImageFont.truetype(os.path.join(workingDir, 'fonts/teko/Teko-Re
 
 
 def tap():
-    global serverStatus
     bus.write_byte(address, i2cID['printing'])
     pop, status = grab_population()
     print('got button request at population: ', pop)
@@ -84,9 +84,11 @@ def tap():
     population_img.save('/tmp/bittest.bmp', 'PNG')
     subprocess.call(["lp", "-o", "fit-to-page", "/tmp/bittest.bmp"])
     time.sleep(20)
-    if serverStatus:
+    if status:
+      print('wifi on status sent')
       bus.write_byte(address, i2cID['wifi_on'])
     else:
+      print('wifi off status sent')
       bus.write_byte(address, i2cID['wifi_off'])
 
 
@@ -103,7 +105,7 @@ def hold():
 def save_last_pop(population):
     currentDate = datetime.datetime.now()
     currentStatus = [population, currentDate]
-    with open('lastpop.pckl', 'wb') as f:
+    with open(os.path.join(workingDir, 'lastpop.pckl'), 'wb') as f:
         pickle.dump(currentStatus, f)
         f.close()
 
@@ -129,7 +131,7 @@ def grab_population():
 
     try:
         # Grab population from remote server, subtract one *wink wink*
-        population_get = requests.get(host, params=payload, timeout=3)
+        population_get = requests.get(host, params=payload, timeout=2)
         population = int(population_get.text)
         save_last_pop(population)
         print (population_get.url)
@@ -139,8 +141,18 @@ def grab_population():
         population = local_interpolation()
         #lastPop = lastPop + 19
         # Add I2C status??
-        print('connectionError, set population: ', population)
+        print('connectionError, set population: ', population, '\n', errc)
         connection = False
+    except requests.exceptions.Timeout as errt:
+        population = local_interpolation()
+        print('timeout error, set population: ', population, '\n', errt)
+        connection = False
+    except requests.exceptions.HTTPError as errh:
+        population = local_interpolation()
+        print('timeout error, set population: ', population, '\n', errh)
+
+    except requests.exceptions.RequestException as e:
+        print (e)
 
     # add thousandths commas, replace with periods.
     population = '{:,}'.format(population)
@@ -198,9 +210,35 @@ def epic_fail():
   GPIO.cleanup()
   raise ValueError('SHUTDOWN')
 
+def create_lastpop():
+    pickleDir = os.path.join(workingDir, 'lastpop.pckl')
+    try:
+        with open (pickleDir, 'rb') as f:
+            print('------file exists------')
+            if os.stat(pickleDir).st_size == 0:
+                print('file is empty')
+                f.close()
+                raise IOError
+            else:
+                print('file is not empty')
+                f.close()
+
+    except IOError:
+        print('-------creating file-------')
+        with open (pickleDir, 'wb') as f:
+            fakePop = 7683435471
+            currentDate = datetime.datetime.now()
+            currentStatus = [fakePop, currentDate]
+            pickle.dump(currentStatus, f)
+            f.close()
+
+
 def main_button_loop():
     global lastPop, lastDate
     global serverStatus
+
+    create_lastpop()
+
     lastPop, lastDate = load_last_pop()
 
     GPIO.setup(buttonPin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
@@ -267,13 +305,17 @@ def main():
 
     except Exception, err:
         print('error: (should highlight)')
+
+        print(err)
         traceback.print_exc()
         GPIO.cleanup()
+        return 1
 
     finally:
         print('cleanup')
         GPIO.cleanup()
         print('GPIO cleanup')
+        return 1
 
 
 if __name__ == "__main__":
