@@ -245,11 +245,7 @@ def create_image(population):
 	#	 fill=black, width=3)
     return pil_im
 
-def epic_fail():
-  subprocess.call("sync")
-  GPIO.output(ledPin, GPIO.HIGH)
-  GPIO.cleanup()
-  raise ValueError('SHUTDOWN')
+    
 
 def main_button_loop():
     global lastPop, lastDate
