@@ -15,7 +15,7 @@ i2cID = {'wifi_on'  : 11,
          'standby'  : 30}
 
 GPIO.setmode(GPIO.BCM)
-GPIO.setup(17, GPIO.OUT) # Program status wire
+GPIO.setup(statusWire, GPIO.OUT) # Program status wire
 bus.write_byte(address, i2cID['loading'])
 print('Libraries loading:\n')
 
@@ -39,12 +39,10 @@ print('Libraries loaded.')
 ledPin       = 18
 buttonPin    = 23
 shutdownPin  = 27
+statusWire   = 17
 
 holdTime     = 5
 tapTime      = 0.01
-nextInterval = 0.0
-dailyFlag    = False
-lastId       = '1'
 printer      = Adafruit_Thermal('/dev/serial0', 19200, timeout=5)
 
 
@@ -80,6 +78,10 @@ teko_med       = ImageFont.truetype(os.path.join(workingDir, 'fonts/teko/Teko-Me
 teko_reg       = ImageFont.truetype(os.path.join(workingDir, 'fonts/teko/Teko-Regular.ttf'), 50)
 teko_sign      = ImageFont.truetype(os.path.join(workingDir, 'fonts/teko/Teko-Regular.ttf'), 60)
 
+# Pickle settings
+variablePckl = 'lastpop.pckl'
+pickleDir = os.path.join(workingDir, variablePckl)
+
 
 def tap():
     bus.write_byte(address, i2cID['printing'])
@@ -98,6 +100,9 @@ def tap():
       bus.write_byte(address, i2cID['wifi_off'])
 
 def shutdown_tap():
+    GPIO.output(ledPin, GPIO.LOW)
+    time.sleep(1)
+    GPIO.output(ledPin, GPIO.HIGH)
     bus.write_byte(address, i2cID['loading'])
     print('shutdown_triggered')
     printer.println('SHUTTING DOWN')
@@ -106,7 +111,6 @@ def shutdown_tap():
     GPIO.cleanup()
     subprocess.call(["shutdown", "-h", "now"])
     time.sleep(5)
-    #sys.exit(1)
 
 # Called when button is held down. No action, warns user.
 def hold():
@@ -117,16 +121,41 @@ def hold():
 def save_last_pop(population):
     currentDate = datetime.datetime.now()
     currentStatus = [population, currentDate]
-    with open(os.path.join(workingDir, 'lastpop.pckl'), 'wb') as f:
+    with open(pickleDir, 'wb') as f:
         pickle.dump(currentStatus, f)
         f.close()
 
 def load_last_pop():
-    with open(os.path.join(workingDir, 'lastpop.pckl'), 'rb') as f:
+    with open(pickleDir, 'rb') as f:
         pop, date = pickle.load(f)
         f.close()
     print('last population: ', pop, ' at time: ', date)
     return pop, date
+
+def check_lastpop():
+    try:
+        with open (pickleDir, 'rb') as f:
+            print('------file exists------')
+
+            if os.stat(pickleDir).st_size == 0:
+                print('file is empty')
+                f.close()
+                raise IOError
+
+            else:
+                print('file is not empty')
+                f.close()
+
+    except IOError:
+        with open (pickleDir, 'wb') as f:
+            # Create garbage population to be overwritten
+            print('-------creating file-------')
+            fakePop = 7683435471
+            currentDate = datetime.datetime.now()
+            currentStatus = [fakePop, currentDate]
+            pickle.dump(currentStatus, f)
+            f.close()
+
 
 def local_interpolation():
     global lastDate, lastPop
@@ -222,38 +251,17 @@ def epic_fail():
   GPIO.cleanup()
   raise ValueError('SHUTDOWN')
 
-def create_lastpop():
-    pickleDir = os.path.join(workingDir, 'lastpop.pckl')
-    try:
-        with open (pickleDir, 'rb') as f:
-            print('------file exists------')
-            if os.stat(pickleDir).st_size == 0:
-                print('file is empty')
-                f.close()
-                raise IOError
-            else:
-                print('file is not empty')
-                f.close()
-
-    except IOError:
-        print('-------creating file-------')
-        with open (pickleDir, 'wb') as f:
-            fakePop = 7683435471
-            currentDate = datetime.datetime.now()
-            currentStatus = [fakePop, currentDate]
-            pickle.dump(currentStatus, f)
-            f.close()
-
-
 def main_button_loop():
     global lastPop, lastDate
     global serverStatus
 
-    create_lastpop()
+    # Check if variables have been stored in lastpop.pckl
+    check_lastpop()
 
     lastPop, lastDate = load_last_pop()
 
-
+    GPIO.setup(ledPin, GPIO.OUT)
+    GPIO.output(ledPin, GPIO.HIGH)
     GPIO.setup(shutdownPin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
     GPIO.setup(buttonPin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
     time.sleep(5)
@@ -283,7 +291,8 @@ def main_button_loop():
       shutdownState = GPIO.input(shutdownPin)
       t           = time.time()
 
-      GPIO.output(17, GPIO.HIGH)
+      # Hardware notify Arduino of running program
+      GPIO.output(statusWire), GPIO.HIGH)
 
       # Has button state changed?
       if buttonState != prevButtonState:
@@ -312,9 +321,10 @@ def main_button_loop():
             prevShutButton = shutdownState
             shutTime       = t
         else:
-            if buttonState == True:
-                if tapEnable == True:
-                    shutdown_tap()
+            if (t - shutTime) >= tapTime:
+                if buttonState == True:
+                    if tapEnable == True:
+                        shutdown_tap()
 
 
 def main():
