@@ -1,13 +1,28 @@
 # Kyle McGrath 2019
 # Commission for Scott Young
 # MINUS ONE
-
-from __future__ import print_function
-print('Libraries loading:\n')
-from PIL import ImageFont, ImageDraw, Image
-from Adafruit_Thermal import *
 import RPi.GPIO as GPIO
 import smbus
+
+# Arduino GPIO connection for immediate status
+bus = smbus.SMBus(1)
+address = 0x04
+
+i2cID = {'wifi_on'  : 11,
+         'wifi_off' : 42,
+         'loading'  : 69,
+         'printing' : 44,
+         'standby'  : 30}
+
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(17, GPIO.OUT) # Program status wire
+bus.write_byte(address, i2cID['loading'])
+print('Libraries loading:\n')
+
+# ...Continue importing
+from __future__ import print_function
+from PIL import ImageFont, ImageDraw, Image
+from Adafruit_Thermal import *
 import subprocess, time, socket
 import traceback
 import numpy as np
@@ -15,6 +30,7 @@ import requests
 import pickle
 import datetime
 import os
+
 print('Libraries loaded.')
 
 #logging.basicConfig(filename='traceback.log', level=os.environ.get("LOGLEVEL", "INFO"))
@@ -22,25 +38,15 @@ print('Libraries loaded.')
 # GPIO configuration
 ledPin       = 18
 buttonPin    = 23
-holdTime     = 10
+shutdownPin  = 27
+
+holdTime     = 5
 tapTime      = 0.01
 nextInterval = 0.0
 dailyFlag    = False
 lastId       = '1'
 printer      = Adafruit_Thermal('/dev/serial0', 19200, timeout=5)
 
-# Arduino GPIO connection
-bus = smbus.SMBus(1)
-address = 0x04
-
-i2cID = {'wifi_on'  : 11,
-         'wifi_off' : 42,
-         'loading'  : 69,
-         'printing' : 44}
-
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(17, GPIO.OUT) # Program status wire
-bus.write_byte(address, i2cID['loading'])
 
 # Set connection, printer, and image layout variables
 ip           = 'minus1.net'
@@ -91,16 +97,22 @@ def tap():
       print('wifi off status sent')
       bus.write_byte(address, i2cID['wifi_off'])
 
-
-# Called when button is held down.  Prints image, invokes shutdown process.
-def hold():
+def shutdown_tap():
     bus.write_byte(address, i2cID['loading'])
-    print('button held')
+    print('shutdown_triggered')
     printer.println('SHUTTING DOWN')
     printer.feed(3)
     subprocess.call("sync")
     GPIO.cleanup()
-    #subprocess.call(["shutdown", "-h", "now"])
+    subprocess.call(["shutdown", "-h", "now"])
+    sys.exit(0)
+
+
+# Called when button is held down. No action, warns user.
+def hold():
+    print('hold action')
+    printer.println('Press once quickly :)')
+    printer.feed(3)
 
 def save_last_pop(population):
     currentDate = datetime.datetime.now()
@@ -241,6 +253,8 @@ def main_button_loop():
 
     lastPop, lastDate = load_last_pop()
 
+
+    GPIO.setup(shutdownPin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
     GPIO.setup(buttonPin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
     time.sleep(5)
 
@@ -248,7 +262,9 @@ def main_button_loop():
 
     # Poll initial button state and time
     prevButtonState = GPIO.input(buttonPin)
+    prevShutButton  = GPIO.input(shutdownPin)
     prevTime        = time.time()
+    shutTime = prevTime
     tapEnable       = False
     holdEnable      = False
 
@@ -264,6 +280,7 @@ def main_button_loop():
     while(True):
       # Poll current button state and time
       buttonState = GPIO.input(buttonPin)
+      shutdownState = GPIO.input(shutdownPin)
       t           = time.time()
 
       GPIO.output(17, GPIO.HIGH)
@@ -289,6 +306,15 @@ def main_button_loop():
           else:                         # Button pressed
             tapEnable  = True           # Enable tap and hold actions
             holdEnable = True
+
+        # Same deal for shutdown button
+        if shutdownState != prevShutButton:
+            prevShutButton = shutdownState
+            shutTime       = t
+        else:
+            if buttonState == True:
+                if tapEnable == True:
+                    shutdown_tap()
 
 
 def main():
