@@ -105,8 +105,8 @@ def shutdown_tap():
     subprocess.call("sync")
     GPIO.cleanup()
     subprocess.call(["shutdown", "-h", "now"])
-    sys.exit(0)
-
+    time.sleep(5)
+    #sys.exit(1)
 
 # Called when button is held down. No action, warns user.
 def hold():
